@@ -9,7 +9,6 @@
 #include "utils/ADT/SmallVector.hpp"
 #include "utils/ADT/StringMap.hpp"
 #include "utils/lisp/lisp.hpp"
-#include "utils/misc.hpp"
 #include <array>
 #include <cstdint>
 
@@ -41,20 +40,28 @@ public:
   /// eg: nop = addi x0, x0, `0`
   enum OperandKind : int8_t {
     Rd,
+    Symbol,
     Rt,
     Rs,
-    Symbol,
     Offset,
     ImmeNeg1,
     Imme0,
     Imme1,
+    X0,
+    X1,
+    X6 = X0 + 6,
   };
+
+  static constexpr auto argTbl = std::make_tuple(
+      Rd, Rt, Rs, Symbol, Offset, ImmeNeg1, Imme0, Imme1, X0, X1, X6);
+  using Types = decltype(argTbl);
 
 private:
   struct InstPattern {
     MCOpCode* Op;
     std::array<OperandKind, 4> Operands;
     uint32_t opNr;
+    MCExpr::ExprTy reloTy = MCExpr::kInvalid;
 
     constexpr uint32_t push(OperandKind op) {
       Operands[opNr] = op;
@@ -66,17 +73,17 @@ private:
   uint32_t InstNr;
 
   bool rd = false, rt = false, rs = false, symbol = false, offset = false,
-       imme0 = false, imme1 = false, immeNeg1 = false;
+       imme0 = false, imme1 = false, immeNeg1 = false, x0 = false, x1 = false,
+       x6 = false;
 
   constexpr void parseImpl(LispNode* rootNode) {
-    /// @note notice that asm inst wont ref to each other cause they all have
-    /// side effets
 
     for (auto son : rootNode->sons) {
       InstPattern inst{};
       inst.Op =
           const_cast<MCOpCode*>(parser::MnemonicFind(son->content.data()));
 
+      /// @note enum the items that may appear in .def file
       for (auto operand : son->sons) {
         auto op = StringSwitch<OperandKind>(operand->content)
                       .Case("rd",
@@ -94,9 +101,16 @@ private:
                               rs = true;
                               return Rs;
                             })
-                      .Case("symbol",
+                      .Case("%hi20",
                             [this](auto&& _) {
                               symbol = true;
+                              inst.reloTy = MCExpr::gHI;
+                              return Symbol;
+                            })
+                      .Case("%lo12",
+                            [this](auto&& _) {
+                              symbol = true;
+                              inst.reloTy = MCExpr::gLO;
                               return Symbol;
                             })
                       .Case("offset",
@@ -119,6 +133,21 @@ private:
                               immeNeg1 = true;
                               return ImmeNeg1;
                             })
+                      .Case("x0",
+                            [this](auto&& _) {
+                              x0 = true;
+                              return X0;
+                            })
+                      .Case("x1",
+                            [this](auto&& _) {
+                              x1 = true;
+                              return X1;
+                            })
+                      .Case("x6",
+                            [this](auto&& _) {
+                              x6 = true;
+                              return X6;
+                            })
                       .Error();
 
         inst.push(op);
@@ -137,67 +166,42 @@ public:
     parseImpl(rootNode);
   }
 
-  template <std::size_t I, OperandKind Kind, typename Ty>
-  void addOperand(MCContext& ctx, MCInstPtrs& Insts, auto ArgsTuple) {
+  constexpr void addOperand(MCContext& ctx, MCInst* Inst,
+                            const InstPattern& pattern, auto ArgsTuple) {
 
-    if constexpr (utils::in_interval<true, true>(Imme0, ImmeNeg1, Kind)) {
-      addOperandImpl(ctx, Insts);
-    } else {
-      addOperandImpl(ctx, Insts, std::get<I>(ArgsTuple));
-    }
-  }
+    for (uint32_t opCnt = 0; opCnt < pattern.opNr; ++opCnt) {
+      const auto& opKind = pattern.Operands[opCnt];
 
-  template <OperandKind Kind, typename Ty>
-  void addOperandImpl(MCContext& ctx, MCInstPtrs& Insts, Ty operand) {
-    for (uint32_t instCnt = 0; instCnt < InstNr; ++instCnt) {
-      const auto& InstPattern = InstPatterns[instCnt];
-      for (uint32_t opCnt = 0; opCnt < InstPattern.opNr; ++opCnt) {
+      auto addOpImpl = [&]<std::size_t I>() {
+        if constexpr (utils::in_interval<true, true>(ImmeNeg1, Imme1, opKind)) {
+          Inst->addOperand(
+              MCOperand::make((uint32_t)opKind - ImmeNeg1 - 1)); // -1, 0, 1
+        } else if constexpr (opKind >= X0) {
+          Inst->addOperand(MCOperand::make((MCReg)opKind - X0)); // x0, x1, x6
+        } else if constexpr (opKind == Symbol || opKind == Offset) {
+          auto& sym = std::get<I>(ArgsTuple);
 
-        if (InstPattern.Operands[opCnt] != Kind) {
-          continue;
+          Inst->addOperand(MCOperand::make(
+              ctx.getTextExpr(sym, pattern.Operands[opCnt].reloTy)));
+
+          ctx.addReloInst(Inst, sym);
+        } else {
+          Inst->addOperand(MCOperand::make(std::get<I>(ArgsTuple)));
         }
+      };
 
-        MCOperand newOp = MCOperand::make(operand);
-
-        auto inst = Insts[instCnt];
-
-        inst->addOperand(std::move(newOp));
-
-        /// record symbols
-        if (Kind == Symbol) {
-          ctx.addReloInst(inst, operand);
-        }
-      }
-    }
-  }
-
-  /// this implement is for `-1` `0` `1`
-  template <OperandKind Kind, typename Ty>
-  void addOperandImpl(MCContext& ctx, MCInstPtrs& Insts) {
-
-    for (uint32_t instCnt = 0; instCnt < InstNr; ++instCnt) {
-      const auto& InstPattern = InstPatterns[instCnt];
-      for (uint32_t opCnt = 0; opCnt < InstPattern.opNr; ++opCnt) {
-
-        if (InstPattern.Operands[opCnt] != Kind) {
-          continue;
-        }
-
-        MCOperand newOp = MCOperand::make((int64_t)Kind - ImmeNeg1 - 1);
-
-        auto inst = Insts[instCnt];
-
-        inst->addOperand(std::move(newOp));
-      }
+      [&]<std::size_t... I>(std::index_sequence<I...>) {
+        return ((std::get<I>(argTbl) == opKind
+                     ? addOpImpl.template operator()<I>()
+                     : void()),
+                ...);
+      }(std::make_index_sequence<std::tuple_size_v<Types>>{});
     }
   }
 
   constexpr auto operator()(MCContext& ctx) {
 
     /// input args
-    constexpr auto argTbl =
-        std::make_tuple(Rd, Rt, Rs, Symbol, Offset, ImmeNeg1, Imme0, Imme1);
-    using Types = decltype(argTbl);
 
     constexpr std::array<bool, std::tuple_size_v<Types>> flags = {
         rd, rt, rs, symbol, offset, immeNeg1, imme0, imme1};
@@ -205,11 +209,10 @@ public:
     constexpr auto instsBuild = [&ctx, this](auto ArgsTuple) {
       MCInstPtrs insts = ctx.newTextInsts(parser::MnemonicFind(Ops)...);
 
-      [&]<std::size_t... I>(std::index_sequence<I...>) {
-        ((flags[I] ? addOperand<std::get<I>(argTbl)>(ctx, insts, ArgsTuple)
-                   : void()),
-         ...);
-      }(std::make_index_sequence<std::tuple_size_v<Types>>{});
+      int idx = 0;
+      for (auto& inst : insts) {
+        addOperand(ctx, inst, InstPatterns[idx++], ArgsTuple);
+      }
 
       ctx.commitTextInsts(insts);
     };
@@ -233,7 +236,7 @@ public:
           if constexpr (flags[Idx] && argIdx < argNr) {
             return std::tuple{std::get<argIdx>(rawTuple)};
           } else {
-            return std::tuple{};
+            return std::make_tuple(nullptr); // hold space
           }
         };
 
