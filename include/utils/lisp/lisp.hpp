@@ -10,7 +10,7 @@ namespace lisp {
 /// @note use someof astNode as the form of eval
 struct LispNode {
   LispNode* fa = nullptr;
-  std::array<LispNode*, 4> sons;
+  std::array<LispNode*, 4> sons{};
   uint32_t sonNr;
 
   constexpr uint32_t push(LispNode* son) {
@@ -28,7 +28,7 @@ class Lisp {
 private:
   StringRef sourceCode;
 
-  std::array<LispNode, 16> tree;
+  std::array<LispNode, 16> tree{};
   uint32_t nodeCnt = 0;
   LispNode* curRoot = &tree[0];
 
@@ -41,7 +41,7 @@ public:
 
   constexpr Lisp(const StringRef _source) : sourceCode(_source) { parse(); }
 
-  constexpr LispNode* getRoot() { return &tree[0]; }
+  constexpr LispNode* getRoot() { return curRoot; }
 
 private:
   constexpr void parse() {

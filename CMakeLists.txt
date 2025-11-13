@@ -36,3 +36,4 @@ set(ASSEMBLER ${MC} ${PARSER} ${UTILS} ${UTILS_ADT})
 
 add_executable(assembler lib/main.cpp ${ASSEMBLER})
 add_executable(test-extStl lib/STL.cpp ${ASSEMBLER})
+add_executable(test-pseudo lib/pseudo.cpp ${ASSEMBLER})

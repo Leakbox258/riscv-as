@@ -166,6 +166,17 @@ public:
     return insts;
   }
 
+  template <std::size_t N>
+  MCInstPtrs newTextInsts(SmallVector<StringRef, N> Ops) {
+    MCInstPtrs insts{};
+
+    for (auto& op : Ops) {
+      insts.emplace_back(newTextInst(op));
+    }
+
+    return insts;
+  }
+
   size_ty commitTextInsts(const MCInstPtrs& insts) {
     size_ty newOffset = 0LL;
 

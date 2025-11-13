@@ -1,11 +1,11 @@
 #ifndef MC_PSEUDO
 #define MC_PSEUDO
 
+#include "MCContext.hpp"
 #include "MCExpr.hpp"
 #include "MCInst.hpp"
+#include "MCOpCode.hpp"
 #include "MCOperand.hpp"
-#include "mc/MCContext.hpp"
-#include "mc/MCOpCode.hpp"
 #include "utils/ADT/SmallVector.hpp"
 #include "utils/ADT/StringMap.hpp"
 #include "utils/lisp/lisp.hpp"
@@ -34,7 +34,7 @@ template <typename T> using StringMap = utils::ADT::StringMap<T>;
 using Lisp = utils::lisp::Lisp;
 using LispNode = utils::lisp::LispNode;
 
-template <const char*... Ops> struct Pseudo {
+struct Pseudo {
 public:
   /// notice that Imme here is ref to defined imme
   /// eg: nop = addi x0, x0, `0`
@@ -58,8 +58,8 @@ public:
 
 private:
   struct InstPattern {
-    MCOpCode* Op;
-    std::array<OperandKind, 4> Operands;
+    StringRef Op;
+    std::array<OperandKind, 4> Operands{};
     uint32_t opNr;
     MCExpr::ExprTy reloTy = MCExpr::kInvalid;
 
@@ -69,8 +69,8 @@ private:
     }
   };
 
-  std::array<InstPattern, 4> InstPatterns;
-  uint32_t InstNr;
+  std::array<InstPattern, 4> InstPatterns{};
+  uint32_t InstNr = 0;
 
   bool rd = false, rt = false, rs = false, symbol = false, offset = false,
        imme0 = false, imme1 = false, immeNeg1 = false, x0 = false, x1 = false,
@@ -78,10 +78,10 @@ private:
 
   constexpr void parseImpl(LispNode* rootNode) {
 
-    for (auto son : rootNode->sons) {
-      InstPattern inst{};
-      inst.Op =
-          const_cast<MCOpCode*>(parser::MnemonicFind(son->content.data()));
+    for (uint32_t sonCnt = 0; sonCnt < rootNode->sonNr; ++sonCnt) {
+      auto& son = rootNode->sons[sonCnt];
+      auto& inst = InstPatterns[InstNr++];
+      inst.Op = son->content.data();
 
       /// @note enum the items that may appear in .def file
       for (auto operand : son->sons) {
@@ -102,13 +102,13 @@ private:
                               return Rs;
                             })
                       .Case("%hi20",
-                            [this](auto&& _) {
+                            [this, &inst](auto&& _) {
                               symbol = true;
                               inst.reloTy = MCExpr::gHI;
                               return Symbol;
                             })
                       .Case("%lo12",
-                            [this](auto&& _) {
+                            [this, &inst](auto&& _) {
                               symbol = true;
                               inst.reloTy = MCExpr::gLO;
                               return Symbol;
@@ -152,7 +152,6 @@ private:
 
         inst.push(op);
       }
-      InstPatterns[InstNr++] = inst;
     }
   }
 
@@ -173,16 +172,16 @@ public:
       const auto& opKind = pattern.Operands[opCnt];
 
       auto addOpImpl = [&]<std::size_t I>() {
-        if constexpr (utils::in_interval<true, true>(ImmeNeg1, Imme1, opKind)) {
+        if (utils::in_interval<true, true>(ImmeNeg1, Imme1, opKind)) {
           Inst->addOperand(
               MCOperand::make((uint32_t)opKind - ImmeNeg1 - 1)); // -1, 0, 1
-        } else if constexpr (opKind >= X0) {
+        } else if (opKind >= X0) {
           Inst->addOperand(MCOperand::make((MCReg)opKind - X0)); // x0, x1, x6
-        } else if constexpr (opKind == Symbol || opKind == Offset) {
+        } else if (opKind == Symbol || opKind == Offset) {
           auto& sym = std::get<I>(ArgsTuple);
 
-          Inst->addOperand(MCOperand::make(
-              ctx.getTextExpr(sym, pattern.Operands[opCnt].reloTy)));
+          Inst->addOperand(
+              MCOperand::make(ctx.getTextExpr(sym, pattern.reloTy)));
 
           ctx.addReloInst(Inst, sym);
         } else {
@@ -199,15 +198,20 @@ public:
     }
   }
 
-  constexpr auto operator()(MCContext& ctx) {
+  auto operator()() {
 
     /// input args
 
-    constexpr std::array<bool, std::tuple_size_v<Types>> flags = {
+    std::array<bool, std::tuple_size_v<Types>> flags = {
         rd, rt, rs, symbol, offset, immeNeg1, imme0, imme1};
 
-    constexpr auto instsBuild = [&ctx, this](auto ArgsTuple) {
-      MCInstPtrs insts = ctx.newTextInsts(parser::MnemonicFind(Ops)...);
+    auto instsBuild = [this](MCContext& ctx, auto ArgsTuple) {
+      SmallVector<StringRef, 4> Ops;
+      for (uint32_t instCnt = 0; instCnt < InstNr; ++instCnt) {
+        Ops.emplace_back(InstPatterns[instCnt].Op);
+      }
+
+      MCInstPtrs insts = ctx.newTextInsts(Ops);
 
       int idx = 0;
       for (auto& inst : insts) {
@@ -217,13 +221,13 @@ public:
       ctx.commitTextInsts(insts);
     };
 
-    constexpr auto argNormalize = [this](auto... args) {
+    auto argNormalize = [this, &flags](auto... args) {
       auto rawTuple = std::make_tuple(args...);
       constexpr std::size_t argNr = std::tuple_size_v<decltype(rawTuple)>;
 
       auto ArgTuple = [&]<std::size_t... I>(std::index_sequence<I...>) {
         auto getElem = [&]<std::size_t Idx>() {
-          constexpr std::size_t argIdx = [this]() {
+          constexpr std::size_t argIdx = [this, &flags]() {
             std::size_t count = 0;
             for (std::size_t k = 0; k < Idx; ++k) {
               if (flags[k]) {
@@ -247,21 +251,26 @@ public:
     };
 
     /// return as a callback
-    return [this](MCContext& ctx, auto... args) {
+    return [instsBuild, argNormalize](MCContext& ctx, auto... args) {
       instsBuild(argNormalize(args...));
     };
   }
 };
 
 #define PSEUDO_DEF(name, pattern)                                              \
-  inline constexpr char _##name[] = #name;                                     \
-  inline constexpr char _##name##_Pattern[] = #pattern;                        \
-  static constexpr Pseudo name{_##name, _##name##_Pattern};
+  inline constexpr char _##name##_pseudo[] = #name;                            \
+  inline constexpr char _##name##_pseudo##_Pattern[] = #pattern;               \
+  static constexpr Pseudo name##_pseudo{_##name##_pseudo,                      \
+                                        _##name##_pseudo##_Pattern};
 
-#define PSEUDO_TLB(name)
-
-/// TODO: more
+#define PSEUDO(name, patternd) PSEUDO_DEF(name, pattern)
+#include "Pseudo.def"
+#undef PSEUDO
 
 } // namespace mc
+
+namespace parser {
+#define PSEUDO_TLB(name) processPseudo(#name)
+} // namespace parser
 
 #endif

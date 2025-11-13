@@ -132,7 +132,7 @@ public:
 
   /// c-style char array
   template <std::size_t N>
-  [[nodiscard]] bool operator==(const char (&Array)[N]) const {
+  [[nodiscard]] constexpr bool operator==(const char (&Array)[N]) const {
     if (this->size() != N) {
       return false;
     }
