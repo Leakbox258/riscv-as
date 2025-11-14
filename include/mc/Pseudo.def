@@ -2,7 +2,7 @@
 
 PSEUDO(LA, ( auipc rd %hi ) ( addi rd rd %lo ) )
 PSEUDO(LD, ( auipc rd %hi ) ( ld rd rd %lo ) ) // conflict
-PSEUDO(SD, ( auipc rt %hi ) ( sd rd rd %lo ) )	// conflict
+PSEUDO(SD, ( auipc rt %hi ) ( sd rd rt %lo ) )	// conflict
 PSEUDO(FLD, ( auipc rt %hi ) ( fld rd rt %lo ) ) // conflict
 PSEUDO(FSD, ( auipc rt %hi ) ( fsd rd rt %lo ) ) // conflict
 

@@ -143,9 +143,11 @@ public:
       EnCoding encoding =
           StringSwitch<EnCoding>(raw_pattern)
               .BeginWith("offset",
-                         [](const StringRef& Str) -> EnCoding {
+                         [this](const StringRef& Str) -> EnCoding {
                            /// NOTE: for constexpr, std::array need a
                            /// more large range than 2 which is more ideal
+                           ++imm_distribute;
+
                            auto [bit_range, length, highest] =
                                parseBitRange(Str.slice(7, Str.size() - 1));
 

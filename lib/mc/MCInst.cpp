@@ -47,8 +47,6 @@ uint32_t MCInst::getRiscvRType() const {
 
   switch (getExprTy()) {
   case ExprTy::kInvalid:
-  case ExprTy::gHI:
-  case ExprTy::gLO:
     /// @warning this enum meaning that you need to fix reloType according to
     /// symbol itself
     utils::unreachable("");
@@ -79,6 +77,8 @@ uint32_t MCInst::getRiscvRType() const {
     return R_RISCV_RVC_JUMP;
   case ExprTy::kRVC_BRANCH:
     return R_RISCV_RVC_BRANCH;
+  case ExprTy::kCALL_PLT:
+    return R_RISCV_CALL_PLT;
   }
 }
 

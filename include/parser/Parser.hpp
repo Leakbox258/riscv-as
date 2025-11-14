@@ -40,7 +40,10 @@ private:
   Token token;
   MCInst* curInst = nullptr;
   SmallVector<std::string, 4> DirectiveStack{};
-  MCContext::size_ty curOffset = 0;
+
+  MCContext::size_ty curTextOffset = 0;
+  MCContext::size_ty curDataOffset = 0;
+  MCContext::size_ty curBssOffset = 0;
 
   void advance();
   uint8_t RegHelper(const StringRef& reg);
@@ -90,7 +93,7 @@ private:
                        }
                      })
           .Default([&](auto&& _) {
-            auto peekTokens = lexer.peekNextTokens<3>();
+            auto peekTokens = lexer.peekNextTokens<4>();
             if (peekTokens.back().type == TokenType::NEWLINE) {
               return true;
             } else {

@@ -5,6 +5,7 @@
 #include <cstring>
 #include <elf.h>
 #include <iterator>
+#include <string>
 #include <type_traits>
 #include <vector>
 
@@ -15,14 +16,7 @@ void MCContext::mkStrTab() {
   /// include label, symbol(relos, variables)
   StrTabBuffer << '\x00';
 
-  /// find extern symbol in relo insts
-  for (auto& [_, sym] : ReloInst) {
-    if (!StrTabBuffer.hasSym(sym)) {
-      StrTabBuffer << sym << '\x00';
-    }
-  }
-
-  for (const auto& [relo_sym, ndx] : Symbols) {
+  for (const auto& [relo_sym, offset, ndx] : Symbols) {
     if (!StrTabBuffer.hasSym(relo_sym)) {
       StrTabBuffer << relo_sym << '\x00';
     }
@@ -33,6 +27,95 @@ void MCContext::mkStrTab() {
       StrTabBuffer << label << '\x00';
     }
   }
+
+  /// find extern symbol in relo insts
+  for (auto& [_, sym] : ReloInst) {
+    if (!StrTabBuffer.hasSym(sym)) {
+      StrTabBuffer << sym << '\x00';
+      ExternSymbols.insert(sym);
+    }
+  }
+}
+
+void MCContext::mkShStrTab() {
+  /// gather .shstrtab
+  /// include names of each section
+  SHStrTabBuffer << '\x00';
+  SHStrTabBuffer << ".text" << '\x00';
+  SHStrTabBuffer << ".data" << '\x00';
+  SHStrTabBuffer << ".bss" << '\x00';
+  SHStrTabBuffer << ".strtab" << '\x00';
+  SHStrTabBuffer << ".symtab" << '\x00';
+  SHStrTabBuffer << ".rela.text" << '\x00';
+  SHStrTabBuffer << ".shstrtab" << '\x00';
+}
+
+void MCContext::mkSymtab() {
+  /// begin with none (local)
+  Elf64_Sym symbol = {};
+  Elf_Syms.emplace_back(std::string{}, std::move(symbol));
+  /// sections(local)
+  auto sections = std::array{"", ".text", ".data", ".bss"};
+  for (size_ty i = 1; i < sections.size(); ++i) {
+    Elf64_Sym symbol = {};
+    auto& SectionName = sections[i];
+
+    // symbol.st_name = SHStrTabBuffer.findOffset(SectionName);
+    symbol.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
+    symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT);
+    symbol.st_shndx = i;
+
+    Elf_Syms.emplace_back(std::string{SectionName}, std::move(symbol));
+    ++local_syms;
+  }
+
+  /// labels(local)
+  for (const auto& label : TextLabels.keys()) {
+
+    if (std::find_if(Symbols.begin(), Symbols.end(), [&](const auto& tuple) {
+          return label == std::get<0>(tuple);
+        }) != Symbols.end()) {
+      /// if a label will be declare as global, then avoid declare as local
+      continue;
+    }
+
+    Elf64_Sym symbol = {};
+
+    symbol.st_name = StrTabBuffer.findOffset(label);
+    symbol.st_value = *TextLabels.find(label);
+    symbol.st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
+    symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT);
+    symbol.st_shndx = std::distance(
+        sections.begin(), std::find(sections.begin(), sections.end(), ".text"));
+
+    Elf_Syms.emplace_back(std::string{label}, std::move(symbol));
+    ++local_syms;
+  }
+
+  /// relo symbols(local)
+  for (const auto& [sym, offset, ndx] : Symbols) {
+    Elf64_Sym symbol = {};
+
+    symbol.st_name = StrTabBuffer.findOffset(sym);
+    symbol.st_value = offset;
+    symbol.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+    symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT); // visibility
+    symbol.st_shndx = ndx;
+
+    Elf_Syms.emplace_back(std::string{sym}, std::move(symbol));
+  }
+
+  /// extern syms
+  for (const auto& sym : ExternSymbols) {
+    Elf64_Sym symbol = {};
+
+    symbol.st_name = StrTabBuffer.findOffset(sym);
+    symbol.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
+    symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT); // visibility
+    symbol.st_shndx = und;
+
+    Elf_Syms.emplace_back(std::string{sym}, std::move(symbol));
+  }
 }
 
 /// FIXME: when use pseudo (not explicitly use %...), need to fix the relo kind
@@ -40,58 +123,30 @@ void MCContext::mkStrTab() {
 void MCContext::Relo() {
 
   for (auto [inst, sym] : ReloInst) {
-    /// if sym def in .text: const Expr* -> imme
-    if (auto where = TextLabels.find(sym)) {
-      int64_t offset = static_cast<int64_t>(*where - inst->getOffset());
-      utils_assert(offset % 2 == 0,
-                   "offset in .text should be align to as least 2");
+    Elf64_Rela Rela{};
+    Rela.r_offset = inst->getOffset();
 
-      inst->reloSym(offset);
+    /// find symtab index in Elf_Syms
+    auto SymTblIdx = std::distance(
+        Elf_Syms.begin(), std::find_if(Elf_Syms.begin(), Elf_Syms.end(),
+                                       [&](const auto& symEntry) {
+                                         return symEntry.first == sym;
+                                       }));
 
-    }
-    /// else if: symbols from .data or .bss configure Elf_Rela
-    else if (auto iter =
-                 std::find_if(Symbols.begin(), Symbols.end(),
-                              [&](auto&& elem) { return elem.first == sym; });
-             iter != Symbols.end()) {
+    Rela.r_info = ELF64_R_INFO(SymTblIdx, inst->getRiscvRType());
 
-      auto [sym, _] = *iter;
+    Rela.r_addend = inst->getExprOp()->getExpr()->getAddend();
 
-      inst->fixRiscvRType<true>();
+    inst->reloSym(0ll);
 
-      Elf64_Rela Rela = {};
-      Rela.r_offset = inst->getOffset();
-      Rela.r_info =
-          ELF64_R_INFO(5 + std::distance(Symbols.begin(), iter),
-                       inst->getRiscvRType()); // idx pointer to idx in .symtab
+    Elf_Relas.emplace_back(std::move(Rela));
 
-      auto expr = inst->getExprOp();
-
-      utils_assert(expr, "failed to find an expr in current instruction");
-
-      Rela.r_addend = expr->getExpr()->getAppend();
-
-      Elf_Relas.emplace_back(std::move(Rela));
-
-      inst->reloSym(0ll);
-    }
-    /// else: the sym will be extern symbol
-    else {
-      this->ExternSymbols.insert(sym);
-
-      inst->fixRiscvRType<true>();
-
-      Elf64_Rela Rela = {};
-      Rela.r_offset = inst->getOffset();
-
-      Rela.r_info = ELF64_R_INFO(
-          5 + Symbols.size() + // skip section name & .data .bss .text sym
-              std::distance(ExternSymbols.begin(), ExternSymbols.find(sym)),
-          inst->getRiscvRType());
-
-      Elf_Relas.emplace_back(std::move(Rela));
-
-      inst->reloSym(0ll);
+    /// Pesudo unpacked insts
+    if (inst->isRelaxable()) {
+      Elf_Relas.emplace_back(
+          Elf64_Rela{.r_offset = 0,
+                     .r_info = ELF64_R_INFO(0, R_RISCV_RELAX),
+                     .r_addend = 0});
     }
   }
 }
@@ -151,82 +206,17 @@ void MCContext::Ehdr_Shdr() {
   }
 
   {
+    mkAlign(8);
+    Offsets.insert(".symtab", offset);
+
+    offset += (Elf_Syms.size()) * sizeof(Elf64_Sym);
+  }
+
+  {
     mkAlign(1);
     Offsets.insert(".strtab", offset);
 
     offset += StrTabBuffer.size();
-  }
-
-  unsigned local_syms = 1;
-  {
-    mkAlign(8);
-    Offsets.insert(".symtab", offset);
-
-    /// begin with none (local)
-    Elf64_Sym symbol = {};
-    Elf_Syms.emplace_back(std::move(symbol));
-
-    /// sections(local)
-    const auto& sections = Offsets.keys();
-    for (size_ty i = 1; i < sections.size() - 1; ++i) {
-      Elf64_Sym symbol = {};
-
-      symbol.st_info = ELF64_ST_INFO(STB_LOCAL, STT_SECTION);
-      symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT);
-      symbol.st_shndx = i;
-
-      Elf_Syms.emplace_back(std::move(symbol));
-      ++local_syms;
-    }
-
-    /// labels(local)
-    for (const auto& label : TextLabels.keys()) {
-      if (std::find_if(Symbols.begin(), Symbols.end(), [&](const auto& tuple) {
-            return label == std::get<0>(tuple);
-          }) != Symbols.end()) {
-        /// if a label will be declare as global, then avoid declare as local
-        continue;
-      }
-
-      Elf64_Sym symbol = {};
-
-      symbol.st_name = StrTabBuffer.findOffset(label);
-      symbol.st_info = ELF64_ST_INFO(STB_LOCAL, STT_NOTYPE);
-      symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT);
-      symbol.st_shndx =
-          std::distance(sections.begin(),
-                        std::find(sections.begin(), sections.end(), ".text"));
-
-      Elf_Syms.emplace_back(std::move(symbol));
-      ++local_syms;
-    }
-
-    /// relo symbols(local)
-    for (const auto& [sym, ndx] : Symbols) {
-      Elf64_Sym symbol = {};
-
-      symbol.st_name = StrTabBuffer.findOffset(sym);
-      symbol.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
-      symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT); // visibility
-      symbol.st_shndx = ndx;
-
-      Elf_Syms.emplace_back(std::move(symbol));
-    }
-
-    /// extern syms
-
-    for (const auto& sym : ExternSymbols) {
-      Elf64_Sym symbol = {};
-
-      symbol.st_name = StrTabBuffer.findOffset(sym);
-      symbol.st_info = ELF64_ST_INFO(STB_GLOBAL, STT_NOTYPE);
-      symbol.st_other = ELF64_ST_VISIBILITY(STV_DEFAULT); // visibility
-      symbol.st_shndx = und;
-
-      Elf_Syms.emplace_back(std::move(symbol));
-    }
-
-    offset += (Elf_Syms.size()) * sizeof(Elf64_Sym);
   }
 
   {
@@ -238,17 +228,6 @@ void MCContext::Ehdr_Shdr() {
   {
     mkAlign(1);
     Offsets.insert(".shstrtab", offset);
-
-    /// gather .shstrtab
-    /// include names of each section
-    SHStrTabBuffer << '\x00';
-    SHStrTabBuffer << ".text" << '\x00';
-    SHStrTabBuffer << ".data" << '\x00';
-    SHStrTabBuffer << ".bss" << '\x00';
-    SHStrTabBuffer << ".strtab" << '\x00';
-    SHStrTabBuffer << ".symtab" << '\x00';
-    SHStrTabBuffer << ".rela.text" << '\x00';
-    SHStrTabBuffer << ".shstrtab" << '\x00';
 
     offset += SHStrTabBuffer.size();
   }
@@ -292,28 +271,28 @@ void MCContext::Ehdr_Shdr() {
       Elf_Shdrs.emplace_back(std::move(shdr));
     };
 
-    /// .text
+    /// .text 1
     SectionHeader(".text", SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, TextOffset,
                   2);
 
-    /// .data
+    /// .data 2
     SectionHeader(".data", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE,
                   DataBuffer.size(), 1);
 
-    /// .bss
+    /// .bss 3
     SectionHeader(".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 0, 1);
 
-    /// .strtab
-    SectionHeader(".strtab", SHT_STRTAB, 0, StrTabBuffer.size(), 1);
-
-    /// .symtab: link to .strtab
+    /// .symtab 4: link to .strtab
     SectionHeader(".symtab", SHT_SYMTAB, 0,
-                  this->Elf_Syms.size() * sizeof(Elf64_Sym), 8, 4, local_syms,
+                  this->Elf_Syms.size() * sizeof(Elf64_Sym), 8, 5, local_syms,
                   sizeof(Elf64_Sym));
 
-    /// .rela.text: link to .symtab
+    /// .strtab 5
+    SectionHeader(".strtab", SHT_STRTAB, 0, StrTabBuffer.size(), 1);
+
+    /// .rela.text 6: link to .symtab
     SectionHeader(".rela.text", SHT_RELA, SHF_INFO_LINK,
-                  Elf_Relas.size() * sizeof(Elf64_Rela), 8, 5, 1,
+                  Elf_Relas.size() * sizeof(Elf64_Rela), 8, 4, 1,
                   sizeof(Elf64_Sym));
 
     /// .shstrtab
@@ -324,6 +303,10 @@ void MCContext::Ehdr_Shdr() {
 void MCContext::writein() {
 
   this->mkStrTab();
+
+  this->mkShStrTab();
+
+  this->mkSymtab();
 
   this->Relo();
 
@@ -370,19 +353,19 @@ void MCContext::writein() {
     streamWriteIn(buffer.data(), buffer.size());
   }
 
-  /// .strtab
-  {
-    padSection(*this->Offsets.find(".strtab"));
-    streamWriteIn((const char*)StrTabBuffer.data(), StrTabBuffer.size());
-  }
-
   /// .symtab
   {
     padSection(*this->Offsets.find(".symtab"));
 
-    for (auto& symbol : this->Elf_Syms) {
+    for (auto& [_, symbol] : this->Elf_Syms) {
       streamWriteIn((char*)&symbol, sizeof(Elf64_Sym));
     }
+  }
+
+  /// .strtab
+  {
+    padSection(*this->Offsets.find(".strtab"));
+    streamWriteIn((const char*)StrTabBuffer.data(), StrTabBuffer.size());
   }
 
   /// .rela.text

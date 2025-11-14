@@ -15,7 +15,7 @@ public:
     kHI, // 12 - 31
     kPCREL_LO,
     kPCREL_HI,
-    kGOT_PCREL_HI,
+    kGOT_PCREL_HI, // -fPIC
     kTPREL_ADD,
     kTPREL_HI,
     kTLS_IE_PCREL_HI, // Initial Exec
@@ -27,9 +27,9 @@ public:
     kRVC_JUMP,
     kRVC_BRANCH,
 
-    /// need to fix with more info
-    gLO,
-    gHI,
+    /// pseudo call & tail
+    kCALL_PLT,
+    /// TODO: kCALL
   };
 
 private:
@@ -57,7 +57,7 @@ public:
   ExprTy getModifier() const { return Kind; }
   void setModifier(ExprTy ty) { Kind = ty; }
 
-  uint64_t getAppend() const { return Append; }
+  uint64_t getAddend() const { return Append; }
 
   /// TODO: dump
 };
@@ -85,7 +85,6 @@ inline unsigned getModifierSize(MCExpr::ExprTy mod) {
     return 9;
   case ExprTy::kLO:
   case ExprTy::kPCREL_LO:
-  case ExprTy::gLO:
   case ExprTy::kBRANCH:
   case ExprTy::kRVC_JUMP:
     return 12;
@@ -96,10 +95,11 @@ inline unsigned getModifierSize(MCExpr::ExprTy mod) {
   case ExprTy::kTPREL_HI:
   case ExprTy::kTLS_IE_PCREL_HI:
   case ExprTy::kTLS_GD_PCREL_HI:
-  case ExprTy::gHI:
     return 20;
   case ExprTy::kJAL:
     return 21;
+  case ExprTy::kCALL_PLT:
+    return 32; // auipc + ...
   }
   utils::unreachable("unknown modifier");
   return 0;

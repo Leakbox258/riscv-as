@@ -9,11 +9,13 @@
 #include "utils/ADT/StringRef.hpp"
 #include "utils/ADT/StringSet.hpp"
 #include "utils/macro.hpp"
+#include <cstddef>
 #include <deque>
 #include <elf.h>
 #include <fstream>
 #include <ostream>
 #include <set>
+#include <string>
 
 namespace mc {
 using StringRef = utils::ADT::StringRef;
@@ -38,6 +40,7 @@ private:
 
   /// .text
   size_ty TextOffset = 0;
+  size_ty InnerLabelNr = 0;
   StringMap<size_ty> TextLabels;
   std::deque<MCInst> Insts; // avoid realloction
   std::deque<MCExpr> Exprs; // avoid realloction
@@ -54,7 +57,8 @@ public:
 
 private:
   // symbols cross sections, define in .text, .data, .bss
-  std::set<std::pair<std::string, NdxSection>> Symbols;
+  std::set<std::tuple<std::string, size_ty, NdxSection>> Symbols;
+
   std::vector<Elf64_Rela> Elf_Relas;
 
   std::set<std::string> ExternSymbols;
@@ -68,7 +72,7 @@ private:
   size_ty BssSize = 0;
 
   /// TODO: add .symtab section
-  std::vector<Elf64_Sym> Elf_Syms;
+  std::vector<std::pair<std::string, Elf64_Sym>> Elf_Syms;
 
   /// .strtab
   ByteStream StrTabBuffer;
@@ -87,6 +91,11 @@ public:
 
 private:
   void mkStrTab();
+
+  void mkShStrTab();
+
+  void mkSymtab();
+  unsigned local_syms = 1;
 
   /// .text symbol inline
   void Relo();
@@ -114,9 +123,15 @@ public:
     return this->TextLabels.insert(Str, std::move(offset));
   }
 
+  std::string buildInnerTextLabel() {
+    auto inner_label = ".L" + std::to_string(InnerLabelNr++);
+    this->TextLabels.insert(inner_label.c_str(), TextOffset);
+    return inner_label;
+  }
+
   /// add local symbols from .data .text .bss
-  bool addReloSym(StringRef Str, NdxSection ndx) {
-    return this->Symbols.insert({Str.str(), ndx}).second;
+  bool addReloSym(StringRef Str, size_ty offset, NdxSection ndx) {
+    return this->Symbols.insert({Str.str(), offset, ndx}).second;
   }
 
   bool getTextOffset() const { return TextOffset; }

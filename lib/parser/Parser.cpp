@@ -37,8 +37,15 @@ uint8_t Parser::RegHelper(const StringRef& reg) {
 void Parser::JrBrHelper(const StringRef& label) {
   ctx.addReloInst(curInst, label.str());
 
-  /// 12 / 21 bits offset padding
-  curInst->addOperand(MCOperand::makeImm(0));
+  if (curInst->isBranch()) {
+    curInst->addOperand(MCOperand::makeExpr(
+        ctx.getTextExpr(label, MCExpr::ExprTy::kBRANCH, 0)));
+  } else if (curInst->isJmp()) {
+    curInst->addOperand(
+        MCOperand::makeExpr(ctx.getTextExpr(label, MCExpr::ExprTy::kJAL, 0)));
+  } else {
+    utils::unreachable("not a jr or br inst");
+  }
 }
 
 void Parser::parse() {
@@ -124,7 +131,7 @@ const mc::MCOpCode* Parser::findOpCode(StringRef mnemonic) {
 
 void Parser::ParseNewLine() {
   if (curInst) {
-    curOffset = ctx.commitTextInst();
+    curTextOffset = ctx.commitTextInst();
     curInst = nullptr;
   }
   advance();
@@ -170,12 +177,15 @@ void Parser::ParseIdentifier() {
 
                      if (section == ".data") {
                        ctx.addDataVar(token.lexeme);
-                       return ctx.addReloSym(token.lexeme, Ndx::data);
+                       return ctx.addReloSym(token.lexeme, curDataOffset,
+                                             Ndx::data);
                      } else if (section == ".bss") {
                        ctx.addBssVar(token.lexeme);
-                       return ctx.addReloSym(token.lexeme, Ndx::bss);
+                       return ctx.addReloSym(token.lexeme, curBssOffset,
+                                             Ndx::bss);
                      } else if (section == ".text") {
-                       return ctx.addReloSym(token.lexeme, Ndx::text);
+                       return ctx.addReloSym(token.lexeme, curTextOffset,
+                                             Ndx::text);
                      }
 
                      utils::unreachable("cant match the section of this label");
@@ -200,17 +210,17 @@ void Parser::ParseInteger() {
       StringSwitch<bool>(DirectiveStack.back())
           .Case(".half",
                 [&](auto&& _) {
-                  ctx.pushDataBuf<uint16_t>(dw);
+                  curDataOffset = ctx.pushDataBuf<uint16_t>(dw);
                   return true;
                 })
           .Case(".word",
                 [&](auto&& _) {
-                  ctx.pushDataBuf<uint32_t>(dw);
+                  curDataOffset = ctx.pushDataBuf<uint32_t>(dw);
                   return true;
                 })
           .Case(".dword",
                 [&](auto&& _) {
-                  ctx.pushDataBuf<uint64_t>(dw);
+                  curDataOffset = ctx.pushDataBuf<uint64_t>(dw);
                   return true;
                 })
           .Case(".align",
@@ -218,7 +228,7 @@ void Parser::ParseInteger() {
                   utils_assert(dw < 16, "expectling align target to be "
                                         "small than 16");
 
-                  ctx.makeDataBufAlign(utils::pow2i(dw));
+                  curDataOffset = ctx.makeDataBufAlign(utils::pow2i(dw));
 
                   return true;
                 })
@@ -227,7 +237,7 @@ void Parser::ParseInteger() {
                   auto e = utils::log2(dw);
                   utils_assert(e, "expecting dw to be pow of 2");
 
-                  ctx.makeDataBufAlign(dw);
+                  curDataOffset = ctx.makeDataBufAlign(dw);
                   return true;
                 })
           .Error();
@@ -240,7 +250,7 @@ void Parser::ParseInteger() {
       StringSwitch<bool>(DirectiveStack.back())
           .Case(".zero",
                 [&](auto&& _) {
-                  ctx.pushBssBuf(dw);
+                  curBssOffset = ctx.pushBssBuf(dw);
                   return true;
                 })
           .Case(".align",
@@ -248,7 +258,7 @@ void Parser::ParseInteger() {
                   utils_assert(dw < 16, "expectling align target to be "
                                         "small than 16");
 
-                  ctx.makeBssBufAlign(utils::pow2i(dw));
+                  curBssOffset = ctx.makeBssBufAlign(utils::pow2i(dw));
 
                   return true;
                 })
@@ -257,7 +267,7 @@ void Parser::ParseInteger() {
                   auto e = utils::log2(dw);
                   utils_assert(e, "expecting dw to be pow of 2");
 
-                  ctx.makeBssBufAlign(dw);
+                  curBssOffset = ctx.makeBssBufAlign(dw);
                   return true;
                 })
           .Error();
@@ -363,19 +373,19 @@ void Parser::ParseInstruction() {
   /// must empty
 
   curInst = ctx.newTextInst(token.lexeme);
-  curInst->modifyOffset(curOffset);
+  curInst->modifyOffset(curTextOffset);
   curInst->modifyLoc(token.loc);
 
   auto [instAlign, padInst] =
       (*curInst).isCompressed()
-          ? std::make_tuple(2, MCInst::makeNop(token.loc, curOffset))
-          : std::make_tuple(4, MCInst::makeNop(token.loc, curOffset));
+          ? std::make_tuple(2, MCInst::makeNop(token.loc, curTextOffset))
+          : std::make_tuple(4, MCInst::makeNop(token.loc, curTextOffset));
 
   /// make align
-  if (curOffset % instAlign) {
+  if (curTextOffset % instAlign) {
     curInst->modifyOffset(ctx.addTextInst(std::move(padInst)));
 
-    curOffset = curInst->getOffset();
+    curTextOffset = curInst->getOffset();
   }
 
   advance();
@@ -415,15 +425,15 @@ void Parser::ParsePseudo() {
 __call_back:
   /// make align
   auto [instAlign, padInst] =
-      std::make_tuple(4, MCInst::makeNop(token.loc, curOffset));
+      std::make_tuple(4, MCInst::makeNop(token.loc, curTextOffset));
 
-  if (curOffset % instAlign) {
-    curOffset = ctx.addTextInst(std::move(padInst));
+  if (curTextOffset % instAlign) {
+    curTextOffset = ctx.addTextInst(std::move(padInst));
   }
 
   for (auto inst : std::apply(
            pseudo(), std::tuple_cat(std::make_tuple(std::ref(ctx)), args))) {
-    curOffset += inst->isCompressed() ? 2 : 4;
+    curTextOffset += inst->isCompressed() ? 2 : 4;
   }
 }
 

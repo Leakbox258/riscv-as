@@ -23,6 +23,8 @@ private:
   size_ty Offset; // offset from the begin of .text
   SmallVector<MCOperand, 6> Operands;
 
+  bool relaxable = false;
+
 public:
   explicit MCInst(const StringRef& _OpCode LIFETIME_BOUND)
       : OpCode(parser::MnemonicFind(_OpCode.str().c_str())) {}
@@ -112,25 +114,6 @@ public:
 
   uint32_t getRiscvRType() const;
 
-  template <bool ExternSym> void fixRiscvRType() {
-    using ExprTy = MCExpr::ExprTy;
-
-    auto ty = getExprTy();
-
-    utils_assert(ty != MCExpr::kInvalid, "unknown relo type");
-
-    if (utils::in_set(ty, MCExpr::gHI, MCExpr::gLO)) {
-      if (ExternSym)
-        getExprOp()->setExpr(utils::in_set_map<ExprTy, ExprTy>(
-            ty, MCExpr::gHI, MCExpr::kGOT_PCREL_HI, MCExpr::gLO,
-            MCExpr::kPCREL_LO));
-      else
-        getExprOp()->setExpr(utils::in_set_map<ExprTy, ExprTy>(
-            ty, MCExpr::gHI, MCExpr::kPCREL_HI, MCExpr::gLO,
-            MCExpr::kPCREL_LO));
-    }
-  }
-
   constexpr static MCInst makeNop(Location Loc, size_ty Offset) {
     auto nop = MCInst(parser::MnemonicFind("addi"), Loc, Offset);
     nop.addOperand(MCOperand::makeReg(*Registers.find("x0")));
@@ -144,6 +127,9 @@ public:
   }
 
   uint32_t makeEncoding() const;
+
+  void relax() { relaxable = true; }
+  bool isRelaxable() const { return relaxable; }
 
 private:
   /// 0 = Rd(optional), 1 = Rs1, 2 = Rs2, 3 = Rs3

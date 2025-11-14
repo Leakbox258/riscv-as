@@ -38,4 +38,4 @@ main_0:
 	# call main_0
 .globl end
 end:
-		nop
+	mv a1, a0

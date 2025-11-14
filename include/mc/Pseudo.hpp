@@ -111,18 +111,37 @@ private:
                       .Case("%hi",
                             [this, &inst](auto&& _) {
                               symbol = true;
-                              inst.reloTy = MCExpr::gHI;
+
+                              if (name == "CALL" || name == "TAIL") {
+                                inst.reloTy = MCExpr::kCALL_PLT;
+                              } else {
+                                inst.reloTy = MCExpr::kPCREL_HI;
+                              }
+
                               return Symbol;
                             })
                       .Case("%lo",
                             [this, &inst](auto&& _) {
                               symbol = true;
-                              inst.reloTy = MCExpr::gLO;
+
+                              if (name == "CALL" || name == "TAIL") {
+                                // inst.reloTy = MCExpr::kCALL_PLT;
+                              } else {
+                                inst.reloTy = MCExpr::kPCREL_LO;
+                              }
+
                               return Symbol;
                             })
                       .Case("offset",
-                            [this](auto&& _) {
+                            [this, &inst](auto&& _) {
                               offset = true;
+
+                              if (name.begin_with("B")) {
+                                inst.reloTy = MCExpr::kBRANCH;
+                              } else {
+                                inst.reloTy = MCExpr::kJAL;
+                              }
+
                               return Offset;
                             })
                       .Case("0",
@@ -189,10 +208,19 @@ public:
           auto arg = std::get<I>(ArgsTuple);
 
           if constexpr (std::is_same_v<decltype(arg), std::string>) {
-            Inst->addOperand(
-                MCOperand::make(ctx.getTextExpr(arg, pattern.reloTy)));
-
-            ctx.addReloInst(Inst, arg);
+            if (pattern.reloTy == MCExpr::kInvalid) {
+              Inst->addOperand(MCOperand::makeImm(0));
+            } else if (pattern.reloTy == MCExpr::kPCREL_LO) {
+              auto inner_label = ctx.buildInnerTextLabel();
+              Inst->addOperand(MCOperand::make(
+                  ctx.getTextExpr(inner_label, pattern.reloTy)));
+              ctx.addReloInst(Inst, inner_label);
+            } else {
+              Inst->addOperand(
+                  MCOperand::make(ctx.getTextExpr(arg, pattern.reloTy)));
+              ctx.addReloInst(Inst, arg);
+            }
+            Inst->relax();
           } else if constexpr (std::is_same_v<decltype(arg), MCReg>) {
             Inst->addOperand(MCOperand::make(arg));
           }
