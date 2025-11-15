@@ -45,8 +45,8 @@ public:
   enum OperandKind : int8_t {
     Rd,
     Symbol,
-    Rt,
     Rs,
+    Rt,
     Offset,
     ImmeNeg1,
     Imme0,
@@ -57,7 +57,7 @@ public:
   };
 
   static constexpr auto argTbl = std::make_tuple(
-      Rd, Symbol, Rt, Rs, Offset, ImmeNeg1, Imme0, Imme1, X0, X1, X6);
+      Rd, Symbol, Rs, Rt, Offset, ImmeNeg1, Imme0, Imme1, X0, X1, X6);
   using Types = decltype(argTbl);
 
 private:
@@ -200,7 +200,7 @@ public:
       auto addOpImpl = [&]<std::size_t I>() {
         if (utils::in_interval<true, true>(ImmeNeg1, Imme1, opKind)) {
           Inst->addOperand(
-              MCOperand::make((uint32_t)opKind - ImmeNeg1 - 1)); // -1, 0, 1
+              MCOperand::makeImm((int64_t)opKind - ImmeNeg1 - 1)); // -1, 0, 1
         } else if (opKind >= X0) {
           Inst->addOperand(MCOperand::make(MCReg(opKind - X0))); // x0, x1, x6
         } else {

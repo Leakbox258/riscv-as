@@ -19,15 +19,17 @@ constexpr inline bool in_interval(T left, T right, T val) {
     return true;
   }
 
+  bool res = false;
+
   if constexpr (LeftBounded) {
-    return Equal(val, left);
+    res |= Equal(val, left);
   }
 
   if constexpr (RightBounded) {
-    return Equal(val, right);
+    res |= Equal(val, right);
   }
 
-  return false;
+  return res;
 }
 
 template <typename T, typename... Args>
