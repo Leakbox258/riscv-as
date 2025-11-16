@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#! /usr/bin/env python3
 
 import os
 import subprocess
@@ -8,7 +8,7 @@ SOURCE_FILE_PATH = "./3rd-party/gnalc/test/contest"
 GNALC_PATH = argv[1]
 OUTUT_DIR = "./test"
 
-if os.path.exists(OUTUT_DIR) == False:
+if os.path.exists(OUTUT_DIR) is False:
   os.mkdir(OUTUT_DIR)
 
 testcases_cnt  = 0
