@@ -1,6 +1,0 @@
-build
-.clangd
-.cache
-./lib/STL.cpp
-test/*
-test_results/
