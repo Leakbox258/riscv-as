@@ -115,54 +115,24 @@ public:
   /// build obj file
   void writein();
 
-  bool addTextLabel(StringRef Str) {
-    return this->TextLabels.insert(Str, TextOffset);
-  }
+  bool addTextLabel(StringRef Str);
 
-  bool addTextLabel(StringRef Str, size_ty offset) {
-    return this->TextLabels.insert(Str, std::move(offset));
-  }
+  bool addTextLabel(StringRef Str, size_ty offset);
 
-  std::string buildInnerTextLabel() {
-    auto inner_label = ".L" + std::to_string(InnerLabelNr++);
-    this->TextLabels.insert(inner_label.c_str(), TextOffset);
-    return inner_label;
-  }
+  std::string buildInnerTextLabel();
 
   /// add local symbols from .data .text .bss
-  bool addReloSym(StringRef Str, size_ty offset, NdxSection ndx) {
-    return this->Symbols.insert({Str.str(), offset, ndx}).second;
-  }
+  bool addReloSym(StringRef Str, size_ty offset, NdxSection ndx);
 
   bool getTextOffset() const { return TextOffset; }
 
-  size_ty addTextInst(MCInst&& inst) {
+  size_ty addTextInst(MCInst&& inst);
 
-    auto newOffset = incTextOffset(inst.isCompressed());
+  MCInst* newTextInst(const StringRef OpCode LIFETIME_BOUND);
 
-    Insts.push_back(std::move(inst));
+  MCInst* newTextInst(const MCOpCode* OpCode LIFETIME_BOUND);
 
-    return newOffset;
-  }
-
-  MCInst* newTextInst(const StringRef OpCode LIFETIME_BOUND) {
-    this->Insts.emplace_back(MCInst(OpCode));
-
-    return &this->Insts.back();
-  }
-
-  MCInst* newTextInst(const MCOpCode* OpCode LIFETIME_BOUND) {
-    this->Insts.emplace_back(MCInst(OpCode));
-
-    return &this->Insts.back();
-  }
-
-  size_ty commitTextInst() {
-
-    auto newOffset = incTextOffset(this->Insts.back().isCompressed());
-
-    return newOffset;
-  }
+  size_ty commitTextInst();
 
   template <std::size_t N>
   MCInstPtrs newTextInsts(const SmallVector<StringRef, N>& Ops) {
@@ -183,17 +153,9 @@ public:
     return insts;
   }
 
-  size_ty commitTextInsts(const MCInstPtrs& insts) {
-    size_ty newOffset;
+  size_ty commitTextInsts(const MCInstPtrs& insts);
 
-    for (auto& inst : insts) {
-      inst->modifyOffset(TextOffset);
-      newOffset = incTextOffset(inst->isCompressed());
-    }
-
-    return newOffset;
-  }
-
+public:
   MCExpr* getTextExpr(std::string Symbol, MCExpr::ExprTy ty,
                       uint64_t Append = 0) {
     Exprs.emplace_back(ty, Symbol, Append);

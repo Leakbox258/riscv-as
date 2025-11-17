@@ -12,6 +12,62 @@
 
 using namespace mc;
 
+bool MCContext::addTextLabel(StringRef Str) {
+  return this->TextLabels.insert(Str, TextOffset);
+}
+
+bool MCContext::addTextLabel(StringRef Str, size_ty offset) {
+  return this->TextLabels.insert(Str, std::move(offset));
+}
+
+std::string MCContext::buildInnerTextLabel() {
+  auto inner_label = ".L" + std::to_string(InnerLabelNr++);
+  this->TextLabels.insert(inner_label.c_str(), TextOffset);
+  return inner_label;
+}
+
+bool MCContext::addReloSym(StringRef Str, size_ty offset, NdxSection ndx) {
+  return this->Symbols.insert({Str.str(), offset, ndx}).second;
+}
+
+MCContext::size_ty MCContext::addTextInst(MCInst&& inst) {
+
+  auto newOffset = incTextOffset(inst.isCompressed());
+
+  Insts.push_back(std::move(inst));
+
+  return newOffset;
+}
+
+MCInst* MCContext::newTextInst(const StringRef OpCode LIFETIME_BOUND) {
+  this->Insts.emplace_back(MCInst(OpCode));
+
+  return &this->Insts.back();
+}
+
+MCInst* MCContext::newTextInst(const MCOpCode* OpCode LIFETIME_BOUND) {
+  this->Insts.emplace_back(MCInst(OpCode));
+
+  return &this->Insts.back();
+}
+
+MCContext::size_ty MCContext::commitTextInst() {
+  auto newOffset = incTextOffset(this->Insts.back().isCompressed());
+
+  return newOffset;
+}
+
+MCContext::size_ty MCContext::commitTextInsts(const MCInstPtrs& insts) {
+  size_ty newOffset;
+
+  for (auto& inst : insts) {
+    inst->modifyOffset(TextOffset);
+    newOffset = incTextOffset(inst->isCompressed());
+  }
+
+  return newOffset;
+}
+
 void MCContext::mkStrTab() {
   /// gather .strtab context
   /// include label, symbol(relos, variables)

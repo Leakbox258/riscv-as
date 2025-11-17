@@ -66,7 +66,6 @@ struct EnCoding {
   unsigned length = 0;
   unsigned highest = 0;
 
-  /// TODO: it's more reasonable to split the encodings
   std::optional<std::array<std::pair<uint16_t, uint16_t>, 8>> bit_range;
   std::optional<uint16_t> static_pattern;
 };

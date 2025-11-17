@@ -44,12 +44,7 @@ public:
     return Operands.size();
   }
 
-  MCOperand& addOperand(MCOperand&& newOp) {
-    utils_assert(Operands.size() < Operands.capacity(),
-                 "too many operand for an inst");
-    Operands.push_back(std::move(newOp));
-    return Operands.back();
-  }
+  MCOperand& addOperand(MCOperand&& newOp);
 
   const MCOpCode* getOpCode() const { return OpCode; }
   utils::Location getLoc() const { return Loc; }
@@ -68,15 +63,7 @@ public:
 
   bool isBranch() const { return OpCode->name.begin_with("B"); }
 
-  MCExpr::ExprTy getModifier() const {
-    for (auto& operand : Operands) {
-      if (operand.isExpr()) {
-        return operand.getExpr()->getModifier();
-      }
-    }
-
-    return MCExpr::kInvalid;
-  }
+  MCExpr::ExprTy getModifier() const;
 
   size_ty getOffset() const { return Offset; }
   void modifyOffset(size_ty newOffset) { Offset = newOffset; }
@@ -94,22 +81,12 @@ public:
   void reloSym(int64_t offset);
 
 private:
-  bool hasExpr() const {
-    return std::any_of(Operands.begin(), Operands.end(),
-                       [&](const MCOperand& op) { return op.isExpr(); });
-  }
+  bool hasExpr() const;
 
 public:
-  const MCOperand* getExprOp() const {
-    return std::find_if(Operands.begin(), Operands.end(),
-                        [&](const MCOperand& op) { return op.isExpr(); });
-  }
+  const MCOperand* getExprOp() const;
 
-  MCOperand* getExprOp() {
-    return std::find_if(Operands.begin(), Operands.end(),
-                        [&](const MCOperand& op) { return op.isExpr(); });
-  }
-
+  MCOperand* getExprOp();
   MCExpr::ExprTy getExprTy() const;
 
   uint32_t getRiscvRType() const;
@@ -150,17 +127,7 @@ private:
     utils::unreachable("cant find the right reg op");
   }
 
-  const MCOperand& findGImmOp() const {
-    // assume that only one immOp in per RV inst
-    for (auto& op : Operands) {
-      if (op.isGImm()) {
-        return op;
-      }
-    }
-    utils::unreachable("cant find the imm op");
-  }
-
-  /// TODO: dump(), verify()
+  const MCOperand& findGImmOp() const;
 };
 
 } // namespace mc

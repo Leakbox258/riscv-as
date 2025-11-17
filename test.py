@@ -24,7 +24,7 @@ for root, dirs, files in os.walk(ASM_FILE_DIR):
     result_obj = f'{TEST_RESULT_DIR}/{file.replace(".s", ".o")}'
   
     if TEST_OPTION.count('a'):		
-      subprocess.run([ASSEMBLER_PATH, "-c", source_asm, "-o", result_obj], check=True)
+      subprocess.run([ASSEMBLER_PATH, "-c", source_asm, "-o", result_obj], check=True, stdout="/dev/null")
    
     if TEST_OPTION.count('l'):
       print("-l not supported yet")

@@ -9,6 +9,23 @@
 
 using namespace mc;
 
+MCOperand& MCInst::addOperand(MCOperand&& newOp) {
+  utils_assert(Operands.size() < Operands.capacity(),
+               "too many operand for an inst");
+  Operands.push_back(std::move(newOp));
+  return Operands.back();
+}
+
+MCExpr::ExprTy MCInst::getModifier() const {
+  for (auto& operand : Operands) {
+    if (operand.isExpr()) {
+      return operand.getExpr()->getModifier();
+    }
+  }
+
+  return MCExpr::kInvalid;
+}
+
 void MCInst::reloSym(int64_t offset) {
 
   if (auto _ = getModifier()) {
@@ -18,6 +35,21 @@ void MCInst::reloSym(int64_t offset) {
   } else {
     utils::unreachable("");
   }
+}
+
+bool MCInst::hasExpr() const {
+  return std::any_of(Operands.begin(), Operands.end(),
+                     [&](const MCOperand& op) { return op.isExpr(); });
+}
+
+const MCOperand* MCInst::getExprOp() const {
+  return std::find_if(Operands.begin(), Operands.end(),
+                      [&](const MCOperand& op) { return op.isExpr(); });
+}
+
+MCOperand* MCInst::getExprOp() {
+  return std::find_if(Operands.begin(), Operands.end(),
+                      [&](const MCOperand& op) { return op.isExpr(); });
 }
 
 MCExpr::ExprTy MCInst::getExprTy() const {
@@ -150,4 +182,14 @@ uint32_t MCInst::makeEncoding() const {
   }
 
   return inst.bits;
+}
+
+const MCOperand& MCInst::findGImmOp() const {
+  // assume that only one immOp in per RV inst
+  for (auto& op : Operands) {
+    if (op.isGImm()) {
+      return op;
+    }
+  }
+  utils::unreachable("cant find the imm op");
 }

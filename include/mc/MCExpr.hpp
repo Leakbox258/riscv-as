@@ -2,7 +2,6 @@
 #define MC_EXPR
 
 #include "utils/ADT/StringRef.hpp"
-#include "utils/ADT/StringSwitch.hpp"
 #include "utils/misc.hpp"
 #include <utility>
 
@@ -33,6 +32,7 @@ public:
     kCALL_PLT,
     /// TODO: kCALL
   };
+  using ExprTy = MCExpr::ExprTy;
 
   static bool isStaticOffset(ExprTy ty) {
     return utils::in_interval<true, true>(kJAL, kRVC_BRANCH, ty);
@@ -57,6 +57,11 @@ public:
   bool isTPREL_HI() const { return Kind == kTPREL_HI; }
   bool isTLS_IE_PCREL_HI() const { return Kind == kTLS_IE_PCREL_HI; }
   bool isTLS_GD_PCREL_HI() const { return Kind == kTLS_GD_PCREL_HI; }
+  bool isJAL() const { return Kind == kJAL; }
+  bool isBranch() const { return Kind == kBRANCH; }
+  bool isRVC_JUMP() const { return Kind == kRVC_JUMP; }
+  bool isRVC_BRANCH() const { return Kind == kRVC_BRANCH; }
+  bool isCALL_PLT() const { return Kind == kCALL_PLT; }
 
   StringRef getSym() const { return Symbol; }
 
@@ -65,51 +70,9 @@ public:
 
   uint64_t getAddend() const { return Append; }
 
-  /// TODO: dump
+  static ExprTy getExprTy(const StringRef& Mod);
+  static unsigned getModifierSize(MCExpr::ExprTy mod);
 };
-
-inline MCExpr::ExprTy getExprTy(const StringRef& Mod) {
-  return utils::ADT::StringSwitch<MCExpr::ExprTy>(Mod)
-      .Case("%lo", MCExpr::kLO)
-      .Case("%hi", MCExpr::kHI)
-      .Case("%pcrel_lo", MCExpr::kPCREL_LO)
-      .Case("%pcrel_hi", MCExpr::kPCREL_HI)
-      .Case("%got_pcrel_hi", MCExpr::kGOT_PCREL_HI)
-      .Case("%tprel_add", MCExpr::kTPREL_ADD)
-      .Case("%tprel_hi", MCExpr::kTPREL_HI)
-      .Case("%tls_ie_pcrel_hi", MCExpr::kTLS_IE_PCREL_HI)
-      .Case("%tls_gd_pcrel_hi", MCExpr::kTLS_GD_PCREL_HI)
-      .Default(MCExpr::kInvalid);
-}
-
-inline unsigned getModifierSize(MCExpr::ExprTy mod) {
-  using ExprTy = MCExpr::ExprTy;
-  switch (mod) {
-  case ExprTy::kInvalid:
-    utils::unreachable("unknown modifier");
-  case ExprTy::kRVC_BRANCH:
-    return 9;
-  case ExprTy::kLO:
-  case ExprTy::kPCREL_LO:
-  case ExprTy::kBRANCH:
-  case ExprTy::kRVC_JUMP:
-    return 12;
-  case ExprTy::kHI:
-  case ExprTy::kPCREL_HI:
-  case ExprTy::kGOT_PCREL_HI:
-  case ExprTy::kTPREL_ADD:
-  case ExprTy::kTPREL_HI:
-  case ExprTy::kTLS_IE_PCREL_HI:
-  case ExprTy::kTLS_GD_PCREL_HI:
-    return 20;
-  case ExprTy::kJAL:
-    return 21;
-  case ExprTy::kCALL_PLT:
-    return 32; // auipc + ...
-  }
-  utils::unreachable("unknown modifier");
-  return 0;
-}
 
 } // namespace mc
 

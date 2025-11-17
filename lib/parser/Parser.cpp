@@ -329,7 +329,7 @@ void Parser::ParseFloat() {
 
 void Parser::ParseModifier() {
   utils_assert(curInst, "expect curInst to be valid");
-  auto ty = mc::getExprTy(token.lexeme);
+  auto ty = mc::MCExpr::getExprTy(token.lexeme);
   utils_assert(ty, "invalid modifier");
   advance();
   utils_assert(token.type == TokenType::LPAREN,

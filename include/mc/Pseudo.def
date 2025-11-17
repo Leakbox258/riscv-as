@@ -1,13 +1,19 @@
 /// reference https://www.cs.sfu.ca/~ashriram/Courses/CS295/assets/notebooks/RISCV/RISCV_CARD.pdf
 
 PSEUDO(LA, ( auipc rd %hi ) ( addi rd rd %lo ) )
+PSEUDO(LB, ( auipc rd %hi ) ( lb rd rd %lo ) ) // conflict
+PSEUDO(LH, ( auipc rd %hi ) ( lh rd rd %lo ) ) // conflict
+PSEUDO(LW, ( auipc rd %hi ) ( lw rd rd %lo ) ) // conflict
 PSEUDO(LD, ( auipc rd %hi ) ( ld rd rd %lo ) ) // conflict
+PSEUDO(SB, ( auipc rt %hi ) ( sb rd rt %lo ) )	// conflict
+PSEUDO(SH, ( auipc rt %hi ) ( sh rd rt %lo ) )	// conflict
+PSEUDO(SW, ( auipc rt %hi ) ( sw rd rt %lo ) )	// conflict
 PSEUDO(SD, ( auipc rt %hi ) ( sd rd rt %lo ) )	// conflict
 PSEUDO(FLD, ( auipc rt %hi ) ( fld rd rt %lo ) ) // conflict
 PSEUDO(FSD, ( auipc rt %hi ) ( fsd rd rt %lo ) ) // conflict
 
 PSEUDO(NOP, ( addi x0, x0, 0 ) )
-// PSEUDO(LI)
+// PSEUDO(LI, Myriad sequences)
 PSEUDO(MV, ( addi rd rs 0 ) )
 PSEUDO(NOT, ( xori rd rs -1 ) )
 PSEUDO(NEG, ( sub rd x0 rs ) )
