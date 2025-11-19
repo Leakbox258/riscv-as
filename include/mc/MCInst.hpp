@@ -121,13 +121,13 @@ public:
 private:
   /// 0 = Rd(optional), 1 = Rs1, 2 = Rs2, 3 = Rs3
   template <unsigned idx> const MCOperand& findRegOp() const {
-    int i = OpCode->hasRd ? 0 : 1;
+    int lim = OpCode->hasRd ? idx : idx - 1, i = 0;
     for (auto& op : Operands) {
       if (!op.isReg()) {
         continue;
       }
 
-      if (i == idx) {
+      if (i == lim) {
         return op;
       } else {
         ++i;

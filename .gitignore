@@ -6,3 +6,4 @@ test/
 test_results/
 plugins/
 compile_commands.json
+.gdb_history

@@ -199,6 +199,7 @@ uint32_t MCInst::makeEncoding() const {
       break;
     case EnCoding::kRs1:
     case EnCoding::kRs1_short:
+
       inst.add(this->findRegOp<1>().getReg(), length);
       break;
     case EnCoding::kRs2:

@@ -43,6 +43,7 @@ add_executable(test-pseudo lib/pseudo.cpp ${ASSEMBLER})
 # test with gnalc
 set(GNALC_RV64 $<TARGET_FILE:gnalc_rv64>)
 set(GNALC_TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/test)
+set(SYLIB_PATH ${CMAKE_CURRENT_SOURCE_DIR}/3rd-party/gnalc/test/sylib/sylib.c)
 
 # ----- Stamp files placed in binary dir -----
 set(DIR_STAMP  ${CMAKE_BINARY_DIR}/gnalc_dir.stamp)
@@ -54,7 +55,6 @@ add_custom_command(
     OUTPUT ${DIR_STAMP}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${GNALC_TEST_DIR}
     COMMAND ${CMAKE_COMMAND} -E touch ${DIR_STAMP}
-		COMMAND ${CMAKE_COMMAND} -E touch ${GNALC_TEST_TIME}
     COMMENT "Create gnalc test directory"
 )
 
@@ -62,14 +62,29 @@ add_custom_command(
     OUTPUT ${ASM_STAMP}
     COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/compileO1.py ${GNALC_RV64}
     COMMAND ${CMAKE_COMMAND} -E touch ${ASM_STAMP}
-    DEPENDS ${TIME_STAMP} gnalc_rv64
+    DEPENDS ${DIR_STAMP} gnalc_rv64
 		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
     COMMENT "Generate RV64 Asm Files"
 		VERBATIM
 )
 
+set(SYLIB_O ${CMAKE_CURRENT_SOURCE_DIR}/test/sylib.o)
+set(SYLIB_A ${CMAKE_CURRENT_SOURCE_DIR}/test/sylib.a)
 
-add_custom_target(generate_gnalc_artifacts DEPENDS ${ASM_STAMP})
+add_custom_command(
+	OUTPUT ${SYLIB_O}
+	COMMAND sh -c "riscv64-linux-gnu-gcc -c ${SYLIB_PATH} -o ${SYLIB_O}"
+	COMMENT "Generate sylib.o RV64"
+)
+
+add_custom_command(
+	OUTPUT ${SYLIB_A}
+	COMMAND sh -c "ar -rcs ${SYLIB_A} ${SYLIB_O}"
+	DEPENDS ${SYLIB_O}
+	COMMENT "Generate sylib.a RV64"
+)
+
+add_custom_target(generate_gnalc_artifacts DEPENDS ${ASM_STAMP} ${SYLIB_A})
 
 add_executable(test-assembler lib/main.cpp ${ASSEMBLER})
 add_dependencies(test-assembler generate_gnalc_artifacts)
