@@ -215,7 +215,8 @@ inline uint64_t signIntCompress(uint64_t integer, unsigned size) {
   int64_t signed_integer = *reinterpret_cast<int64_t*>(&integer);
 
   if (signed_integer >= 0) {
-    utils_assert(signed_integer < std::pow(2, size) - 1, "size limit excessed");
+    // utils_assert(signed_integer < std::pow(2, size) - 1, "size limit
+    // excessed");
 
     return integer;
   } else {

@@ -244,10 +244,14 @@ void Parser::ParseInteger() {
       DirectiveStack.pop_back();
 
     } else if (DirectiveStack[DirectiveStack.size() - 2] == ".bss") {
-      utils_assert(dw == 0, "data def in bss supposed to be all zero");
 
       StringSwitch<bool>(DirectiveStack.back())
           .Case(".zero",
+                [&](auto&& _) {
+                  curBssOffset = ctx.pushBssBuf(dw);
+                  return true;
+                })
+          .Case(".space",
                 [&](auto&& _) {
                   curBssOffset = ctx.pushBssBuf(dw);
                   return true;

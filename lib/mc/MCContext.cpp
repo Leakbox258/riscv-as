@@ -410,8 +410,7 @@ void MCContext::writein() {
   /// .bss
   {
     padSection(*this->Offsets.find(".bss"));
-    std::vector<char> buffer(BssSize, '\x00');
-    streamWriteIn(buffer.data(), buffer.size());
+    /// readelf: Section '.bss' has no data to dump.
   }
 
   /// .symtab
