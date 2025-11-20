@@ -25,6 +25,7 @@ enum class TokenType {
 
   INSTRUCTION, // e.g., addi, lw, sd
   REGISTER,    // e.g., a0, sp, x10
+  MODE,        // rtz, rwio...
 
   DIRECTIVE,        // e.g., .global, .section
   LABEL_DEFINITION, // e.g., loop:, main:

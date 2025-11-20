@@ -120,6 +120,8 @@ public:
 
   bool hasRd = false;
 
+  bool needRoundOp = false;
+
   /// NOTE: for constexpr, std::array need a more
   /// large range than 6 which is more ideal
   std::array<EnCoding, 8> encodings;
@@ -224,8 +226,10 @@ public:
                                     bit_range, std::nullopt};
                   })
               .BeginWith("rm",
-                         [](const StringRef& Str) -> EnCoding {
+                         [this](const StringRef& Str) -> EnCoding {
                            // [2:0]
+                           needRoundOp = true;
+
                            auto [bit_range, length, highest] =
                                parseBitRange(Str.slice(3, Str.size() - 1));
 

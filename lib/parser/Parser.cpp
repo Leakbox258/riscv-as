@@ -100,6 +100,9 @@ void Parser::parse() {
     case TokenType::REGISTER:
       ParseRegister();
       break;
+    case TokenType::MODE:
+      ParseMode();
+      break;
     case TokenType::DIRECTIVE:
       ParseDirective();
       break;
@@ -560,6 +563,15 @@ __make_li:
 void Parser::ParseRegister() {
   utils_assert(curInst, "expect curInst to be valid");
   curInst->addOperand(MCOperand::makeReg(RegHelper(token.lexeme)));
+  advance();
+}
+
+/// TODO: recognize more modes
+void Parser::ParseMode() {
+  utils_assert(curInst, "expect curInst to be valid");
+  curInst->addOperand(
+      MCOperand::makeImm(*mc::RoundModes.find(token.lexeme.c_str())));
+
   advance();
 }
 

@@ -199,7 +199,6 @@ uint32_t MCInst::makeEncoding() const {
       break;
     case EnCoding::kRs1:
     case EnCoding::kRs1_short:
-
       inst.add(this->findRegOp<1>().getReg(), length);
       break;
     case EnCoding::kRs2:
@@ -211,8 +210,7 @@ uint32_t MCInst::makeEncoding() const {
       inst.add(this->findRegOp<3>().getReg(), length);
       break;
     case EnCoding::kRm:
-      /// TODO: more rounding modes
-      inst.add(0b111, 3); // rm[0:2]
+      inst.add(this->findRm()->getRm(), length);
       break;
     case EnCoding::kMemFence:
     case EnCoding::kImm:
@@ -251,6 +249,23 @@ uint32_t MCInst::makeEncoding() const {
   }
 
   return inst.bits;
+}
+
+std::optional<MCOperand> MCInst::findRm() const {
+  std::optional<MCOperand> rm = std::nullopt;
+  for (auto& op : Operands) {
+    if (op.isRm()) {
+      rm = op;
+      break;
+    }
+  }
+
+  if (!rm.has_value()) {
+    /// rtz as default
+    rm = MCOperand::makeRm((uint8_t)0b001);
+  }
+
+  return rm;
 }
 
 const MCOperand& MCInst::findGImmOp() const {

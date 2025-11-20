@@ -55,8 +55,10 @@ struct ByteStream {
   }
 
   /// for .strtab / .shstrtab
+  /// WARNING: arg0 must end with '\x00'
   size_ty findOffset(StringRef Str) const;
 
+  /// WARNING: arg0 must end with '\x00'
   bool hasSym(StringRef Str) const;
 
   /// for debug

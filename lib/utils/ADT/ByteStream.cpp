@@ -7,7 +7,7 @@ ByteStream::size_ty ByteStream::findOffset(StringRef Str) const {
   for (const auto& chr : buffer) {
 
     if (chr == *Str.begin()) {
-      if (!std::memcmp(Str.data(), buffer.data() + offset, Str.size())) {
+      if (!std::memcmp(Str.data(), buffer.data() + offset, Str.size() + 1)) {
         return offset;
       }
     }
@@ -23,7 +23,7 @@ bool ByteStream::hasSym(StringRef Str) const {
   for (const auto& chr : buffer) {
 
     if (chr == *Str.begin()) {
-      if (!std::memcmp(Str.data(), buffer.data() + offset, Str.size())) {
+      if (!std::memcmp(Str.data(), buffer.data() + offset, Str.size() + 1)) {
         return true;
       }
     }

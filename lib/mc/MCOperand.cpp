@@ -38,8 +38,9 @@ const StringMap<uint8_t> CRegisters = {
     {"fs0", 0}, {"fs1", 1}, {"fa0", 2}, {"fa1", 3}, {"fa2", 4}, {"fa3", 5},
     {"fa4", 6}, {"fa5", 7}};
 
-const StringMap<uint8_t> RoundModes = {
-    {"rnz", 000}, {"rtz", 001}, {"rdn", 010}, {"rup", 011}, {"rmm", 100}};
+const StringMap<uint8_t> RoundModes = {{"rne", 0b000}, {"rtz", 0b001},
+                                       {"rdn", 0b010}, {"rup", 0b011},
+                                       {"rmm", 0b100}, {"dyn", 0b111}};
 
 MCOperand MCOperand::makeReg(MCReg _Reg) {
   MCOperand op;
@@ -89,6 +90,13 @@ MCOperand MCOperand::makeInst(const MCInst* _Inst) {
   return op;
 }
 
+MCOperand MCOperand::makeRm(uint8_t _Rm) {
+  MCOperand op;
+
+  op.Imm = std::move(_Rm);
+  op.Kind = OpTy::kRoundMode;
+  return op;
+}
 void MCOperand::RewriteSymRelo(int64_t encoding) {
   utils_assert(isExpr(), "expecting to have at least one expr*");
 

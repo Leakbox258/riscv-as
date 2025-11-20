@@ -4,6 +4,7 @@ build
 ./lib/STL.cpp
 test/
 test_results/
+test_result/
 plugins/
 compile_commands.json
 .gdb_history

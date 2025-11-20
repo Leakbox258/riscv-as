@@ -34,6 +34,8 @@ class MCOperand {
     kDFPImme,
     kExpr,
     kInst,
+    kRoundMode,
+    /// TODO: more other modes
   };
 
   OpTy Kind = kInvalid;
@@ -70,6 +72,8 @@ public:
 
   static MCOperand makeInst(const MCInst* _Inst);
 
+  static MCOperand makeRm(uint8_t _rm);
+
   template <typename Ty> static MCOperand make(Ty op) {
 
     if constexpr (std::is_same_v<Ty, MCReg>) {
@@ -97,6 +101,7 @@ public:
   bool isGImm() const { return utils::in_set(Kind, kImme, kSFPImme, kDFPImme); }
   bool isExpr() const { return Kind == kExpr; }
   bool isInst() const { return Kind == kInst; }
+  bool isRm() const { return Kind == kRoundMode; }
 
   MCReg getReg() const {
     utils_assert(isReg(), "not a reg");
@@ -156,6 +161,11 @@ public:
   const MCInst* getInst() const {
     utils_assert(isInst(), "not a sub-instruction");
     return Inst;
+  }
+
+  uint8_t getRm() const {
+    utils_assert(isRm(), "not ref to a rounding mode");
+    return (uint8_t)Imm;
   }
 
   /// encoding here expected to be processed

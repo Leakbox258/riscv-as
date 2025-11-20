@@ -66,6 +66,8 @@ private:
   void ParseLi();
 
   void ParseRegister();
+  void ParseMode();
+
   void ParseDirective();
   void ParseLabelDef();
   void ParseString();

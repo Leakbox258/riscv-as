@@ -111,6 +111,7 @@ void MCContext::mkSymtab() {
   /// begin with none (local)
   Elf64_Sym symbol = {};
   Elf_Syms.emplace_back(std::string{}, std::move(symbol));
+
   /// sections(local)
   auto sections = std::array{"", ".text", ".data", ".bss"};
   for (size_ty i = 1; i < sections.size(); ++i) {

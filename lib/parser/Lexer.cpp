@@ -33,6 +33,8 @@ std::string to_string(TokenType type) {
     return "INSTRUCTION";
   case TokenType::REGISTER:
     return "REGISTER";
+  case TokenType::MODE:
+    return "MODE";
   case TokenType::DIRECTIVE:
     return "DIRECTIVE";
   case TokenType::LABEL_DEFINITION:
@@ -139,6 +141,11 @@ const Token& Lexer::scanIdentifier() {
   if (MnemonicContain(lexeme.c_str()) || PseudoContain(lexeme.c_str()) ||
       lexeme == "li") {
     return makeToken(TokenType::INSTRUCTION, lexeme);
+  }
+
+  /// TODO: more modes to be recognizable
+  if (mc::RoundModes.find(lexeme.c_str())) {
+    return makeToken(TokenType::MODE, lexeme);
   }
 
   if (mc::Registers.find(lexeme)) {

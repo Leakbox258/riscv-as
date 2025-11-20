@@ -137,6 +137,8 @@ private:
     utils::unreachable("cant find the right reg op");
   }
 
+  std::optional<MCOperand> findRm() const;
+
   const MCOperand& findGImmOp() const;
 };
 
