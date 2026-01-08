@@ -206,7 +206,7 @@ void MCContext::Relo() {
     /// Pesudo unpacked insts
     if (inst->isRelaxable()) {
       Elf_Relas.emplace_back(
-          Elf64_Rela{.r_offset = 0,
+          Elf64_Rela{.r_offset = inst->getOffset(),
                      .r_info = ELF64_R_INFO(0, R_RISCV_RELAX),
                      .r_addend = 0});
     }
@@ -342,7 +342,7 @@ void MCContext::Ehdr_Shdr() {
                   DataBuffer.size(), 1);
 
     /// .bss 3
-    SectionHeader(".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 0, 1);
+    SectionHeader(".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, BssSize, 1);
 
     /// .symtab 4: link to .strtab
     SectionHeader(".symtab", SHT_SYMTAB, 0,
